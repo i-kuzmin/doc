@@ -1,0 +1,142 @@
+#!/bin/perl
+use strict;
+
+package Cmd;
+sub new
+{
+    my ($class, $name, $desc, $routine) = @_;
+
+    my $this = {
+        name => $name,
+        description => $desc,
+        routine => $routine,
+        subroutines => {},
+    };
+    bless $this, $class;
+    return $this;
+}
+
+# -----------------------------------------------------------------------------
+
+sub knows
+{
+    my ($this, $name) = @_;
+    if ($name && defined $this->{subroutines}->{$name}) {
+        return 1;
+    }
+    return 0;
+}
+
+# -----------------------------------------------------------------------------
+
+sub add_sub($$)
+{
+    my ($this, $subCmd) = @_;
+    if ($this->knows($subCmd->{name})) {
+        die "Duplicate command name $this->{name}::\"$subCmd->{name}\"";
+    }
+    $this->{subroutines}->{$subCmd->{name}} = $subCmd;
+}
+
+# -----------------------------------------------------------------------------
+
+sub get_sub($$)
+{
+    my ($this, $name) = @_;
+    return $this->{subroutines}->{$name}
+}
+
+# -----------------------------------------------------------------------------
+
+sub run
+{
+    my ($this) = shift;
+    return $this->{routine}($this, @_);
+}
+
+# -----------------------------------------------------------------------------
+
+sub help
+{
+    my ($this, @argv) = @_;
+    my $cmds = join ( '|', keys %{$this->{subroutines}});
+    print "Usage: $this->{name} [$cmds] - $this->{description}\n";
+    for my $cmd ( values %{$this->{subroutines}}) {
+        print "    $cmd->{name} - $cmd->{description}\n"
+    }
+    if (@argv) {
+        print "\n";
+        print "Can't parse: \"" . join (' ', @argv) . "\"\n";
+        return -1
+    }
+}
+
+# -----------------------------------------------------------------------------
+
+sub process
+{
+    my ($this, $cmd, @a) = @_;
+    my $sub;
+    if ($sub = $this->get_sub($cmd)) {
+        return $sub->run(@a);
+
+    } else {
+        return $this->help($cmd, @a);
+    }
+}
+
+# =============================================================================
+
+sub LOG {
+    our $g_log_level;
+    my $level = shift;
+    if ($level <= $g_log_level) {
+        printf @_;
+    }
+}
+
+# -----------------------------------------------------------------------------
+
+sub set_log_level {
+    our $g_log_level = shift;
+}
+
+# -----------------------------------------------------------------------------
+
+sub DEBUG { LOG(3, @_); }
+
+# =============================================================================
+
+sub cmd_init {
+    my ($this, $name, @argv) = @_;
+
+    if ($name) {
+        if (! -d $name) { mkdir $name; }
+        chdir $name;
+    }
+
+    return 0;
+}
+
+# -----------------------------------------------------------------------------
+
+sub init_cmds()
+{
+    my $cmd = new Cmd('doc', "Document processing wrapper");
+    $cmd->add_sub( new Cmd('init', "Initialise new document", \&cmd_init));
+    return $cmd
+}
+
+# =============================================================================
+
+sub main
+{
+    set_log_level(3);
+
+    my $cmd_list = init_cmds;
+    $cmd_list->process(@_);
+}
+
+# -----------------------------------------------------------------------------
+
+exit main @ARGV;
