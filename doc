@@ -92,6 +92,7 @@ sub LOG {
     my $level = shift;
     if ($level <= $g_log_level) {
         printf @_;
+        print "\n";
     }
 }
 
@@ -105,16 +106,73 @@ sub set_log_level {
 
 sub DEBUG { LOG(3, @_); }
 
+# -----------------------------------------------------------------------------
+
+sub DUMP { LOG(4, @_); }
+
 # =============================================================================
+
+sub Makefile {
+    our $OUTDIR;
+    my ($name) = @_;
+    return <<ENDMAKEFILE;
+MAKEFLAGS += --no-builtin-rules
+
+OUTDIR := $OUTDIR
+../$name.pdf: $name.tex |\${OUTDIR}
+	pdflatex -output-directory \${OUTDIR} \$<
+	cp \${OUTDIR}/$name.pdf \$@
+
+\${OUTDIR}:
+	echo "#  make \$@"
+	mkdir \$@
+
+clean:
+	rm -rf \${OUTDIR} ../$name.pdf
+ENDMAKEFILE
+}
+
+# -----------------------------------------------------------------------------
+
+sub gitignore {
+    our $OUTDIR;
+    return <<ENDGITIGNORE;
+$OUTDIR
+ENDGITIGNORE
+}
+
+# -----------------------------------------------------------------------------
 
 sub cmd_init {
     my ($this, $name, @argv) = @_;
 
     if ($name) {
-        if (! -d $name) { mkdir $name; }
+        if (! -d $name) {
+            DEBUG("Create \"$name\"");
+            mkdir $name;
+        }
         chdir $name;
+        if (! -d ".git") {
+            DEBUG("#  Initialise repository");
+            my $msg;
+            $msg = `git init`
+                || die "$msg\nCan't initialise repository"; DUMP $msg;
+            open (my $gitignore, ">", ".gitignore");
+            print $gitignore gitignore;
+            close $gitignore;
+        }
+        if (! -f "Makefile") {
+            DEBUG("#  Populate Makefile");
+            open (my $mkfile, ">", "Makefile")
+                || die "Can't create \"Makefile\"";
+            print $mkfile Makefile $name;
+            close $mkfile;
+        }
+        if (! -f "$name.tex") {
+            exec "vim +TTemplate\\ ru-article $name.tex";
+        }
+        exec "vim $name.tex";
     }
-
     return 0;
 }
 
@@ -132,6 +190,7 @@ sub init_cmds()
 sub main
 {
     set_log_level(3);
+    our $OUTDIR = ".out";
 
     my $cmd_list = init_cmds;
     $cmd_list->process(@_);
