@@ -119,16 +119,25 @@ sub Makefile {
 MAKEFLAGS += --no-builtin-rules
 
 OUTDIR := $OUTDIR
+
+.PHONY: pdf
+
+pdf: ../$name.pdf
+
 ../$name.pdf: $name.tex |\${OUTDIR}
 	pdflatex -output-directory \${OUTDIR} \$<
-	cp \${OUTDIR}/$name.pdf \$@
+	mv \${OUTDIR}/$name.pdf \$@
 
 \${OUTDIR}:
 	echo "#  make \$@"
 	mkdir \$@
 
 clean:
-	rm -rf \${OUTDIR} ../$name.pdf
+	rm -rf \${OUTDIR}
+
+pack: pdf
+    git diff-index --quiet HEAD
+	tar -cvf ${OUTDIR}/src.tar .git
 ENDMAKEFILE
 }
 
@@ -143,9 +152,33 @@ ENDGITIGNORE
 
 # -----------------------------------------------------------------------------
 
+sub git_add {
+    my $msg;
+    my ($fname) = @_;
+
+    `git add "$fname"`; !$?
+        || die "$msg\n Can't add \"$fname\" to repository"; DUMP $msg;
+
+   our $isCommitRequired = "true";
+}
+
+# -----------------------------------------------------------------------------
+
+sub git_commit {
+    my $message = shift;
+    my $msg;
+    our $isCommitRequired;
+    if ($isCommitRequired) {
+        $msg = `git commit -m "$message"`; !$?
+            || die "$msg\n Can't perform commit"
+    }
+}
+
+# -----------------------------------------------------------------------------
+
 sub cmd_init {
     my ($this, $name, @argv) = @_;
-
+    my $msg;
     if ($name) {
         if (! -d $name) {
             DEBUG("Create \"$name\"");
@@ -154,21 +187,28 @@ sub cmd_init {
         chdir $name;
         if (! -d ".git") {
             DEBUG("#  Initialise repository");
-            my $msg;
-            $msg = `git init`
+            $msg = `git init`; !$?
                 || die "$msg\nCan't initialise repository"; DUMP $msg;
             open (my $gitignore, ">", ".gitignore");
             print $gitignore gitignore;
             close $gitignore;
+            git_add ".gitignore";
         }
         if (! -f "Makefile") {
             DEBUG("#  Populate Makefile");
             open (my $mkfile, ">", "Makefile")
-                || die "Can't create \"Makefile\"";
+                || die "Can't create \"Makefile\""; DUMP $msg;
             print $mkfile Makefile $name;
             close $mkfile;
+            git_add "Makefile";
+
         }
         if (! -f "$name.tex") {
+            `touch $name.tex`;
+            git_add "$name.tex";
+        }
+        git_commit "Initial commit";
+        if (! -s "$name.tex") {
             exec "vim +TTemplate\\ ru-article $name.tex";
         }
         exec "vim $name.tex";
