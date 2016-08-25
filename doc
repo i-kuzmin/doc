@@ -1,6 +1,9 @@
 #!/bin/perl
 use strict;
 
+# =============================================================================
+# CLI interface
+# =============================================================================
 package Cmd;
 sub new
 {
@@ -86,6 +89,8 @@ sub process
 }
 
 # =============================================================================
+# LOGGING
+# =============================================================================
 
 sub LOG {
     our $g_log_level;
@@ -110,6 +115,8 @@ sub DEBUG { LOG(3, @_); }
 
 sub DUMP { LOG(4, @_); }
 
+# =============================================================================
+# Files
 # =============================================================================
 
 sub Makefile {
@@ -150,7 +157,9 @@ $OUTDIR
 ENDGITIGNORE
 }
 
-# -----------------------------------------------------------------------------
+# =============================================================================
+# Auxiliary
+# =============================================================================
 
 sub git_add {
     my $msg;
@@ -176,7 +185,48 @@ sub git_commit {
 
 # -----------------------------------------------------------------------------
 
-sub cmd_init {
+sub git_init {
+    my $name = shift;
+    my $msg;
+
+    $msg = `git init`; !$?
+        || die "$msg\nCan't initialise repository"; DUMP $msg;
+
+    unlink glob ".git/hooks/*.sample";
+
+    open (my $description, ">", ".git/description");
+    print $description "Document \"$name\" repository (version " . version() . ")\n" .
+                       "Ilya Kuzmin (i.g.kuzmin.spb\@gmail.com) (c)\n";
+    close $description;
+
+    open (my $gitignore, ">", ".gitignore");
+    print $gitignore gitignore;
+    close $gitignore;
+
+    git_add ".gitignore";
+}
+
+# -----------------------------------------------------------------------------
+
+sub touch {
+    my $fname = shift;
+    open my $fh, ">>", "$fname";
+    print $fh "";
+    close $fh;
+}
+
+# -----------------------------------------------------------------------------
+
+sub version {
+    return "1.0"
+}
+
+# =============================================================================
+# Commands Implementation
+# =============================================================================
+
+
+sub cmd_new{
     my ($this, $name, @argv) = @_;
     my $msg;
     if ($name) {
@@ -187,12 +237,7 @@ sub cmd_init {
         chdir $name;
         if (! -d ".git") {
             DEBUG("#  Initialise repository");
-            $msg = `git init`; !$?
-                || die "$msg\nCan't initialise repository"; DUMP $msg;
-            open (my $gitignore, ">", ".gitignore");
-            print $gitignore gitignore;
-            close $gitignore;
-            git_add ".gitignore";
+            git_init "$name"
         }
         if (! -f "Makefile") {
             DEBUG("#  Populate Makefile");
@@ -204,7 +249,7 @@ sub cmd_init {
 
         }
         if (! -f "$name.tex") {
-            `touch $name.tex`;
+            touch "$name.tex";
             git_add "$name.tex";
         }
         git_commit "Initial commit";
@@ -221,7 +266,7 @@ sub cmd_init {
 sub init_cmds()
 {
     my $cmd = new Cmd('doc', "Document processing wrapper");
-    $cmd->add_sub( new Cmd('init', "Initialise new document", \&cmd_init));
+    $cmd->add_sub( new Cmd('new', "Initialise new document", \&cmd_new));
     return $cmd
 }
 
