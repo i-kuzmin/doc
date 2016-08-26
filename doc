@@ -126,25 +126,31 @@ sub Makefile {
 MAKEFLAGS += --no-builtin-rules
 
 OUTDIR := $OUTDIR
+NAME   := $name
 
-.PHONY: pdf
+.PHONY: pack pdf
 
-pdf: ../$name.pdf
+pdf: \${OUTDIR}/\${NAME}.pdf
+pack: ../\${NAME}.pdf
 
-../$name.pdf: $name.tex |\${OUTDIR}
+\${OUTDIR}/\${NAME}.pdf: \${NAME}.tex |\${OUTDIR}
 	pdflatex -output-directory \${OUTDIR} \$<
-	mv \${OUTDIR}/$name.pdf \$@
 
 \${OUTDIR}:
 	echo "#  make \$@"
 	mkdir \$@
 
 clean:
+	echo "#  clean \${OUTDIR}"
 	rm -rf \${OUTDIR}
 
-pack: pdf
-    git diff-index --quiet HEAD
-	tar -cvf ${OUTDIR}/src.tar .git
+../\${NAME}.pdf: \${OUTDIR}/\${NAME}.pdf .git
+	echo "#  packing \$@"
+	git diff-index --quiet HEAD || \\
+	   	(git status && echo "Changes wasn't commit" && false)
+	git gc
+	tar -cf \${OUTDIR}/src.tar .git
+	pdftk \${OUTDIR}/\${NAME}.pdf attach_files \${OUTDIR}/src.tar output ../\${NAME}.pdf
 ENDMAKEFILE
 }
 
