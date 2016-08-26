@@ -164,6 +164,25 @@ ENDGITIGNORE
 }
 
 # =============================================================================
+# Doc helpers
+# =============================================================================
+
+sub doc_is_here {
+    open my $description, "<" ,".git/description" || return;
+    my ($name, $version)
+    while(<$description>) {
+        $name = $1 and $version = $2
+            if /Document "(.+)" repository \(version ([\d.]+)\)/;
+    }
+    close my $description
+    if (!$name) return;
+    return {
+        'name' => $name,
+        'version' => $version,
+    };
+}
+
+# =============================================================================
 # Auxiliary
 # =============================================================================
 
@@ -214,6 +233,15 @@ sub git_init {
 
 # -----------------------------------------------------------------------------
 
+sub git_checkout {
+    my $rev = shift;
+    my $msg;
+    $msg = `git checkout $rev`; !$?
+        || die "$msg\nCan't check out repository"; DUMP $msg;
+}
+
+# -----------------------------------------------------------------------------
+
 sub touch {
     my $fname = shift;
     open my $fh, ">>", "$fname";
@@ -232,7 +260,7 @@ sub version {
 # =============================================================================
 
 
-sub cmd_new{
+sub cmd_new {
     my ($this, $name, @argv) = @_;
     my $msg;
     if ($name) {
@@ -269,10 +297,44 @@ sub cmd_new{
 
 # -----------------------------------------------------------------------------
 
+sub cmd_open {
+    my ($this, $fname, @argv) = @_;
+    my ($msg);
+
+    my $name = "$fname.tmp";
+
+    #$fname =~ /(\w+)\.pdf/
+    #    || die "can't get document from \"$fname\"";
+    #$name = $1;
+
+    ! -d $name && mkdir $name
+        || die "Can't create new \"$name\"";
+
+    $msg = `pdftk $fname unpack_file output $name/`; !$?
+        || die "$msg\nCan't extraxt sources"; DUMP $msg;
+    chdir $name;
+    $msg = `tar -xf src.tar && rm src.tar`; !$?
+        || die "$msg\nCan't unpuck sources"; DUMP $msg;
+
+    git_checkout "-- .";
+    #if (my $doc = doc_is_here) {
+    #    my $original_name = $doc->{'name'};
+    #    chdir "..";
+    #    if ( -d $original_name ) {
+    #        print "#  extracted to $name";
+    #        return
+    #    }
+    #    
+    #}
+}
+
+# -----------------------------------------------------------------------------
+
 sub init_cmds()
 {
     my $cmd = new Cmd('doc', "Document processing wrapper");
     $cmd->add_sub( new Cmd('new', "Initialise new document", \&cmd_new));
+    $cmd->add_sub( new Cmd('open', "Extract sources from document", \&cmd_open));
     return $cmd
 }
 
