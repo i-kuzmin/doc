@@ -167,15 +167,15 @@ ENDGITIGNORE
 # Doc helpers
 # =============================================================================
 
-sub doc_is_here {
+sub doc_in_cwd {
     open my $description, "<" ,".git/description" || return;
-    my ($name, $version)
+    my ($name, $version);
     while(<$description>) {
         $name = $1 and $version = $2
             if /Document "(.+)" repository \(version ([\d.]+)\)/;
     }
-    close my $description
-    if (!$name) return;
+    close $description;
+    if (!$name) { return; }
     return {
         'name' => $name,
         'version' => $version,
@@ -303,29 +303,38 @@ sub cmd_open {
 
     my $name = "$fname.tmp";
 
-    #$fname =~ /(\w+)\.pdf/
-    #    || die "can't get document from \"$fname\"";
-    #$name = $1;
-
-    ! -d $name && mkdir $name
+    mkdir $name
         || die "Can't create new \"$name\"";
 
     $msg = `pdftk $fname unpack_file output $name/`; !$?
         || die "$msg\nCan't extraxt sources"; DUMP $msg;
+
     chdir $name;
     $msg = `tar -xf src.tar && rm src.tar`; !$?
         || die "$msg\nCan't unpuck sources"; DUMP $msg;
 
     git_checkout "-- .";
-    #if (my $doc = doc_is_here) {
-    #    my $original_name = $doc->{'name'};
-    #    chdir "..";
-    #    if ( -d $original_name ) {
-    #        print "#  extracted to $name";
-    #        return
-    #    }
-    #    
-    #}
+
+    if (my $doc = doc_in_cwd) {
+        my $original_name = $doc->{'name'};
+        chdir "..";
+        if ( -d $original_name || ! rename $name, $original_name) {
+            print "#  extracted $fname -> $name\n";
+            return
+        }
+        print "#  extracted $fname -> $original_name\n";
+    }
+}
+
+sub cmd_test {
+    my ($this, $fname, @argv) = @_;
+    if (my $doc = doc_in_cwd) {
+        print "name: $doc->{'name'}\n";
+        print "version: $doc->{'version'}\n";
+
+    } else {
+        print "It is not a doc directory\n";
+    }
 }
 
 # -----------------------------------------------------------------------------
@@ -335,6 +344,7 @@ sub init_cmds()
     my $cmd = new Cmd('doc', "Document processing wrapper");
     $cmd->add_sub( new Cmd('new', "Initialise new document", \&cmd_new));
     $cmd->add_sub( new Cmd('open', "Extract sources from document", \&cmd_open));
+    $cmd->add_sub( new Cmd('test', "test", \&cmd_test));
     return $cmd
 }
 
